@@ -1,0 +1,54 @@
+---
+title: "Predicting Activity"
+author: "Tan Chen"
+date: "February 27, 2016"
+output: html_document
+---
+
+##Data processing  
+First we load the data and see that it has a lot of NAs and character fields. I clean the data by:  
+1. Removing any column that has NA  
+2. Convert the "classe" column to factor  
+3. Remove all character columns  
+4. Remove the first 3 columns since they are the row index and time stamps  
+```{r}
+library(readr)
+raw.training <- read_csv("pml-training.csv")
+training <- raw.training[,!apply(is.na(raw.training), 2, any)]
+training$classe <- as.factor(training$classe)
+training <- training[, !sapply(training, is.character)]
+training <- training[, -(1:3)]
+```
+
+##Fit a GBM model  
+I first turn on parallel processing with all cores to allow for faster computation. Then I preset my parameters to do cross validation and fit the training data using GBM.  
+```{r, cache = TRUE}
+library(caret)
+library(parallel)
+library(doParallel)
+cluster <- makeCluster(detectCores())
+registerDoParallel(cluster)
+
+set.seed(1234)
+fitControl <- trainControl(method = "repeatedcv",
+                           number = 10,
+                           repeats = 5,
+                           allowParallel = TRUE)
+fitGBM <- train(classe~., data = training, 
+                method = "gbm",
+                trControl = fitControl, 
+                verbose = FALSE)
+
+stopCluster(cluster)
+```
+
+##Predicting the test  
+Loading in the test file and predicting the classe gave the following results 
+```{r}
+testing <- read_csv("pml-testing.csv")
+predGBM <- predict(fitGBM, newdata = testing)
+predGBM
+```
+
+##Conculsion  
+My GBM correctly predict all 20 test cases. I credit the accuracy to the 10 folds cross validation repeated 5 times. It took a while to train the model, but it was well worth the time for accuracy.
